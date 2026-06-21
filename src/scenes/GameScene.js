@@ -1296,13 +1296,23 @@ export class GameScene extends Phaser.Scene {
 
   /* ===================== DIALOGS ===================== */
   _showStartDialog() {
-    this.startDialog = this.add.container(0, 0).setScrollFactor(0).setDepth(50);
-    const bg = this.add.image(0, 0, 'dialog_bg1').setOrigin(0, 0).setDisplaySize(480, 720);
-    const btnBg = this.add.image(177, 350, 'coin_bg').setOrigin(0, 0).setDisplaySize(126, 35).setInteractive();
-    const label = this.add.text(215, 355, 'Start', { fontSize: '18px', color: '#ffff00' });
-    this.startDialog.add([bg, btnBg, label]);
+    // Use a separate camera for UI overlays so input works correctly
+    this.dialogCam = this.cameras.add(0, 0, 480, 720);
+    this.dialogCam.setScroll(0, 0);
+
+    this.startDialogElements = [];
+    const bg = this.add.image(0, 0, 'dialog_bg1').setOrigin(0, 0).setDisplaySize(480, 720).setDepth(50);
+    const btnBg = this.add.image(177, 350, 'coin_bg').setOrigin(0, 0).setDisplaySize(126, 35).setDepth(51).setInteractive();
+    const label = this.add.text(215, 355, 'Start', { fontSize: '18px', color: '#ffff00' }).setDepth(51);
+    this.startDialogElements.push(bg, btnBg, label);
+
+    // Ignore these from main camera, show only on dialog camera
+    this.cameras.main.ignore(this.startDialogElements);
+
     btnBg.on('pointerdown', () => {
-      this.startDialog.setVisible(false);
+      this.startDialogElements.forEach(e => e.setVisible(false));
+      this.cameras.remove(this.dialogCam);
+      this.dialogCam = null;
       this.gameStarted = true;
       this._startRobots();
       this._startGhost();
@@ -1311,16 +1321,24 @@ export class GameScene extends Phaser.Scene {
 
   _showGameOverDialog() {
     if (this.gameOverDialog) return;
-    this.gameOverDialog = this.add.container(0, 0).setScrollFactor(0).setDepth(50);
-    const bg = this.add.image(0, 0, 'dialog_bg1').setOrigin(0, 0).setDisplaySize(480, 720).setAlpha(0.8);
-    const dialogBg = this.add.image(10, 260, 'dialog_bg').setOrigin(0, 0).setDisplaySize(460, 200);
-    const title = this.add.text(170, 290, 'GAME OVER', { fontSize: '24px', color: '#ff0000' });
-    const sub = this.add.text(120, 330, 'The game is over!', { fontSize: '16px', color: '#ffff00' });
-    const restartBg = this.add.image(40, 390, 'coin_bg').setOrigin(0, 0).setDisplaySize(126, 35).setInteractive();
-    const restartLbl = this.add.text(70, 395, 'Restart', { fontSize: '16px', color: '#00ff00' });
-    const exitBg = this.add.image(300, 390, 'coin_bg').setOrigin(0, 0).setDisplaySize(126, 35).setInteractive();
-    const exitLbl = this.add.text(345, 395, 'Exit', { fontSize: '16px', color: '#ff0000' });
-    this.gameOverDialog.add([bg, dialogBg, title, sub, restartBg, restartLbl, exitBg, exitLbl]);
+    this.gameOverDialog = true;
+
+    this.dialogCam2 = this.cameras.add(0, 0, 480, 720);
+    this.dialogCam2.setScroll(0, 0);
+
+    this.gameOverElements = [];
+    const bg = this.add.image(0, 0, 'dialog_bg1').setOrigin(0, 0).setDisplaySize(480, 720).setAlpha(0.8).setDepth(50);
+    const dialogBg = this.add.image(10, 260, 'dialog_bg').setOrigin(0, 0).setDisplaySize(460, 200).setDepth(51);
+    const title = this.add.text(170, 290, 'GAME OVER', { fontSize: '24px', color: '#ff0000' }).setDepth(52);
+    const sub = this.add.text(120, 330, 'The game is over!', { fontSize: '16px', color: '#ffff00' }).setDepth(52);
+    const restartBg = this.add.image(40, 390, 'coin_bg').setOrigin(0, 0).setDisplaySize(126, 35).setDepth(52).setInteractive();
+    const restartLbl = this.add.text(70, 395, 'Restart', { fontSize: '16px', color: '#00ff00' }).setDepth(52);
+    const exitBg = this.add.image(300, 390, 'coin_bg').setOrigin(0, 0).setDisplaySize(126, 35).setDepth(52).setInteractive();
+    const exitLbl = this.add.text(345, 395, 'Exit', { fontSize: '16px', color: '#ff0000' }).setDepth(52);
+    this.gameOverElements.push(bg, dialogBg, title, sub, restartBg, restartLbl, exitBg, exitLbl);
+
+    this.cameras.main.ignore(this.gameOverElements);
+
     restartBg.on('pointerdown', () => { this.scene.restart(); });
     exitBg.on('pointerdown', () => { this.scene.start('StartScene'); });
   }
