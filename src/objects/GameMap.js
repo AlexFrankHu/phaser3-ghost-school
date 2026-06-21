@@ -201,6 +201,13 @@ export class GameMap {
     return t !== TileType.TILE && t !== TileType.DOOR_START;
   }
 
+  isPassableForGhostRelaxed(pos) {
+    if (pos.x < 0 || pos.x >= this.mapWidth || pos.y < 0 || pos.y >= this.mapHeight) return false;
+    const topY = this.mapHeight - 1 - pos.y;
+    const t = this.tiles[pos.x][topY];
+    return t !== TileType.TILE;
+  }
+
   isWall(tileX, tileTopY) {
     if (tileX < 0 || tileX >= this.mapWidth || tileTopY < 0 || tileTopY >= this.mapHeight) return true;
     return this.tiles[tileX][tileTopY] === TileType.TILE;

@@ -718,7 +718,7 @@ export class GameScene extends Phaser.Scene {
     // Go home if low health
     if (!g.isGoHome) {
       const maxBlood = getGhostLevelInfo(g.level).blood;
-      if (g.blood < maxBlood * 0.4) {
+      if (g.blood < maxBlood * 0.4 && g.blood > 0) {
         let closest = null, minDist = Infinity;
         for (const pos of this.gameMap.ghostStartPosList) {
           const d = Math.abs(pos.x - g.x) + Math.abs(pos.y - g.y);
@@ -726,17 +726,32 @@ export class GameScene extends Phaser.Scene {
         }
         if (closest) {
           const startPos = this._getGhostStartPos();
-          const path = new AutoFindWay(
-            startPos,
-            { x: Math.round(closest.x), y: Math.round(closest.y) },
+          const dest = { x: Math.round(closest.x), y: Math.round(closest.y) };
+          // Try normal pathfinding first
+          let path = new AutoFindWay(
+            startPos, dest,
             (pos) => this.gameMap.isPassableForGhost(pos)
           ).getWayLine();
+          // If normal path fails, try relaxed (allow passing through doors)
+          if (!path || path.length === 0) {
+            path = new AutoFindWay(
+              startPos, dest,
+              (pos) => this.gameMap.isPassableForGhostRelaxed(pos)
+            ).getWayLine();
+          }
           if (path && path.length > 0) {
             if (this._assignGhostPath(path)) {
               g.isGoHome = true;
               g.startAttack = false;
               if (!g.isAutoRun) { this._ghostReachDest(); }
             }
+          } else {
+            // Fallback: teleport ghost home
+            g.x = closest.x;
+            g.y = closest.y;
+            g.isGoHome = true;
+            g.startAttack = false;
+            this._ghostReachDest();
           }
         }
       }
