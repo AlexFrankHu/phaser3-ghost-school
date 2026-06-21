@@ -355,9 +355,16 @@ export class GameScene extends Phaser.Scene {
         (pos) => this.gameMap.isPassableForRobot(pos)
       ).getWayLine();
       if (!path || path.length === 0) continue;
-      robot.isAutoRun = true;
-      robot.autoPath = path;
-      robot.autoIdx = path.length - 2;
+      if (path.length === 1) {
+        robot.x = path[0].x;
+        robot.y = path[0].y;
+        robot.isAutoRun = false;
+        this._robotReachDest(robot);
+      } else {
+        robot.isAutoRun = true;
+        robot.autoPath = path;
+        robot.autoIdx = path.length - 2;
+      }
       break;
     }
   }
@@ -398,9 +405,18 @@ export class GameScene extends Phaser.Scene {
 
     if (robot.isAutoRun && robot.autoPath) {
       const spd = 3 * delta;
-      if (robot.autoIdx < 0) return;
+      if (robot.autoIdx < 0 || robot.autoIdx >= robot.autoPath.length) {
+        robot.isAutoRun = false;
+        robot.autoPath = null;
+        this._robotReachDest(robot);
+        this._updateRobotSprite(robot);
+        return;
+      }
       let t = robot.autoPath[robot.autoIdx];
-      if (robot.x === t.x && robot.y === t.y) {
+      const closeEnough = Math.abs(robot.x - t.x) < 0.05 && Math.abs(robot.y - t.y) < 0.05;
+      if (closeEnough) {
+        robot.x = t.x;
+        robot.y = t.y;
         if (robot.autoIdx <= 0) {
           robot.isAutoRun = false;
           robot.autoPath = null;
@@ -552,24 +568,60 @@ export class GameScene extends Phaser.Scene {
     this.ghostLevelText.setVisible(true);
   }
 
+  _getGhostStartPos() {
+    const g = this.ghost;
+    const gx = Math.round(g.x);
+    const gy = Math.round(g.y);
+    // Try rounded position first, then adjacent tiles
+    const candidates = [
+      { x: gx, y: gy },
+      { x: Math.floor(g.x), y: Math.floor(g.y) },
+      { x: Math.ceil(g.x), y: Math.ceil(g.y) },
+      { x: gx + 1, y: gy }, { x: gx - 1, y: gy },
+      { x: gx, y: gy + 1 }, { x: gx, y: gy - 1 },
+    ];
+    for (const c of candidates) {
+      if (this.gameMap.isPassableForGhost(c)) return c;
+    }
+    return { x: gx, y: gy };
+  }
+
+  _assignGhostPath(path) {
+    const g = this.ghost;
+    if (!path || path.length === 0) return false;
+    if (path.length === 1) {
+      // Already adjacent to destination, snap there
+      g.x = path[0].x;
+      g.y = path[0].y;
+      g.isAutoRun = false;
+      g.autoPath = null;
+      return true;
+    }
+    g.autoPath = path;
+    g.isAutoRun = true;
+    g.autoIdx = path.length - 2;
+    return true;
+  }
+
   _ghostSelectDest() {
     const g = this.ghost;
     g.isGotoPlayer = false;
     g.isGotoBed = false;
+    const startPos = this._getGhostStartPos();
 
     // If player is not in bed and not dead, chase player
     if (this.player.state !== State.INBED && this.player.state !== State.DEAD) {
       const path = new AutoFindWay(
-        { x: Math.floor(g.x), y: Math.floor(g.y) },
-        { x: Math.floor(this.player.x), y: Math.floor(this.player.y) },
+        startPos,
+        { x: Math.round(this.player.x), y: Math.round(this.player.y) },
         (pos) => this.gameMap.isPassableForGhost(pos)
       ).getWayLine();
       if (path && path.length > 0) {
-        g.autoPath = path;
-        g.isAutoRun = true;
-        g.autoIdx = path.length - 2;
-        g.isGotoPlayer = true;
-        return;
+        if (this._assignGhostPath(path)) {
+          g.isGotoPlayer = true;
+          if (!g.isAutoRun) { this._ghostReachDest(); }
+          return;
+        }
       }
     }
 
@@ -591,15 +643,15 @@ export class GameScene extends Phaser.Scene {
       if (g.homeInfo.flag === HomeFlag.EMPTY) continue;
 
       const path = new AutoFindWay(
-        { x: Math.floor(g.x), y: Math.floor(g.y) },
-        { x: Math.floor(g.homeInfo.ghostPosition.x), y: Math.floor(g.homeInfo.ghostPosition.y) },
+        startPos,
+        { x: Math.round(g.homeInfo.ghostPosition.x), y: Math.round(g.homeInfo.ghostPosition.y) },
         (pos) => this.gameMap.isPassableForGhost(pos)
       ).getWayLine();
       if (!path || path.length === 0) continue;
-      g.autoPath = path;
-      g.isAutoRun = true;
-      g.autoIdx = path.length - 2;
-      break;
+      if (this._assignGhostPath(path)) {
+        if (!g.isAutoRun) { this._ghostReachDest(); }
+        break;
+      }
     }
   }
 
@@ -673,17 +725,18 @@ export class GameScene extends Phaser.Scene {
           if (d < minDist) { minDist = d; closest = pos; }
         }
         if (closest) {
+          const startPos = this._getGhostStartPos();
           const path = new AutoFindWay(
-            { x: Math.floor(g.x), y: Math.floor(g.y) },
-            { x: Math.floor(closest.x), y: Math.floor(closest.y) },
+            startPos,
+            { x: Math.round(closest.x), y: Math.round(closest.y) },
             (pos) => this.gameMap.isPassableForGhost(pos)
           ).getWayLine();
           if (path && path.length > 0) {
-            g.autoPath = path;
-            g.isAutoRun = true;
-            g.autoIdx = path.length - 2;
-            g.isGoHome = true;
-            g.startAttack = false;
+            if (this._assignGhostPath(path)) {
+              g.isGoHome = true;
+              g.startAttack = false;
+              if (!g.isAutoRun) { this._ghostReachDest(); }
+            }
           }
         }
       }
@@ -695,9 +748,18 @@ export class GameScene extends Phaser.Scene {
 
     if (g.isAutoRun && g.autoPath) {
       const spd = 5.5 * delta;
-      if (g.autoIdx < 0) return;
+      if (g.autoIdx < 0 || g.autoIdx >= g.autoPath.length) {
+        g.isAutoRun = false;
+        g.autoPath = null;
+        this._ghostReachDest();
+        this._updateGhostSprite();
+        return;
+      }
       let t = g.autoPath[g.autoIdx];
-      if (g.x === t.x && g.y === t.y) {
+      const closeEnough = Math.abs(g.x - t.x) < 0.05 && Math.abs(g.y - t.y) < 0.05;
+      if (closeEnough) {
+        g.x = t.x;
+        g.y = t.y;
         if (g.autoIdx <= 0) {
           g.isAutoRun = false;
           g.autoPath = null;
@@ -725,15 +787,22 @@ export class GameScene extends Phaser.Scene {
           g.startAttack = false;
           g.isGotoBed = true;
           g.homeInfo.doorBlood = 0;
+          const startPos = this._getGhostStartPos();
           const path = new AutoFindWay(
-            { x: Math.floor(g.x), y: Math.floor(g.y) },
+            startPos,
             { x: g.homeInfo.bedX, y: g.homeInfo.bedY },
             (pos) => this.gameMap.isPassableForGhost(pos)
           ).getWayLine();
           if (path && path.length > 0) {
-            g.autoPath = path;
-            g.isAutoRun = true;
-            g.autoIdx = path.length - 2;
+            if (!this._assignGhostPath(path)) {
+              // Already at bed
+              this._ghostReachDest();
+            }
+          } else {
+            // Can't path to bed, snap directly
+            g.x = g.homeInfo.bedX;
+            g.y = g.homeInfo.bedY;
+            this._ghostReachDest();
           }
         }
       }
